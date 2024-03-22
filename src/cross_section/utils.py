@@ -160,3 +160,57 @@ def add_z_to_points_list_from_z_list(points_list, z_list):
         x, y = point.xy
         new_points_list.append(Point(x[0], y[0], z))
     return new_points_list
+
+
+def get_interpolated_points_from_points_list_by_a_distance(points_list, distance):
+    line = LineString(points_list)
+    line_length = line.length
+    number_of_points = int(numpy.ceil(line_length / distance) + 1)
+    points_interpolation_list = numpy.linspace(0, 1, number_of_points)[1:-1]
+    points_interpolation_list = [
+        line.line_interpolate_point(interpolation_value, normalized=True)
+        for interpolation_value in points_interpolation_list
+    ]
+    return points_interpolation_list
+
+
+def create_all_points_from_shore_points_list(shore_points_list, qi, manning, si):
+    points_list = []
+    shore_points_z = add_z_to_points_list_from_z_list(shore_points_list, [0] * 2)
+    points_list.extend(shore_points_z)
+
+    line_string = LineString(shore_points_list)
+    bottom_points = [
+        line_string.line_interpolate_point(0.1, normalized=True),
+        line_string.line_interpolate_point(0.9, normalized=True),
+    ]
+
+    wi = line_string.length
+    di = ((qi * manning) / (wi * (si**0.5))) ** (3 / 5)
+    hi = 2 * di / 1.8
+    bottom_points_z = add_z_to_points_list_from_z_list(bottom_points, [hi] * 2)
+    points_list.extend(bottom_points_z)
+
+    # Ajouter les points au 30 cm entre la berge et le fond
+    for shore_points in shore_points_z:
+        corresponding_bottom_points = bottom_points_z[
+            numpy.argmin(
+                [
+                    shore_points.distance(bottom_points)
+                    for bottom_points in bottom_points_z
+                ]
+            )
+        ]
+        shore_bottom_points_interpolation_list = (
+            get_interpolated_points_from_points_list_by_a_distance(
+                [shore_points, corresponding_bottom_points], 0.3
+            )
+        )
+        points_list.extend(shore_bottom_points_interpolation_list)
+
+    # Ajouter les points au 30cm dans le fond
+    bottom_points_interpolation_list = (
+        get_interpolated_points_from_points_list_by_a_distance(bottom_points_z, 0.3)
+    )
+    points_list.extend(bottom_points_interpolation_list)
+    return points_list

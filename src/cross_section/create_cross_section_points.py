@@ -1,7 +1,7 @@
 import geopandas
 import pandas
 from pathlib import Path
-from shapely.geometry import LineString
+from shapely.geometry import LineString, Point
 from tqdm import tqdm
 
 from src.cross_section.utils import (
@@ -11,7 +11,7 @@ from src.cross_section.utils import (
     get_boundaries_points_list,
     adjust_point_to_be_on_polygon_edge,
     get_extremities_points_from_points_before_and_after,
-    add_z_to_points_list_from_z_list,
+    create_all_points_from_shore_points_list,
 )
 
 MANNING = 0.037
@@ -21,6 +21,7 @@ def create_cross_section_points(
     data, folder_save_path, save_boudaries_points_and_line=False
 ):
     pk_list = []
+    error_list = []
     z_list = []
     points_list = []
     boundary_list = []
@@ -51,6 +52,18 @@ def create_cross_section_points(
             intersect_points_after
         )
 
+        # Ajouter les points qui sont sur la frontière en amont
+        intersect_points_after_point_class = [
+            Point(point[0], point[1]) for point in intersect_points_after
+        ]
+        uptstream_middle_points_list = create_all_points_from_shore_points_list(
+            intersect_points_after_point_class, qi, MANNING, si
+        )
+        points_list.extend(uptstream_middle_points_list)
+        pk_list.extend([pk] * len(uptstream_middle_points_list))
+        z_list.extend([point.coords[0][2] for point in uptstream_middle_points_list])
+        ###
+
         boundary_list.extend(
             get_boundaries_points_list(intersect_points_before, intersect_points_after)
         )
@@ -63,22 +76,20 @@ def create_cross_section_points(
         )
         line_list.extend(int_line_list)
 
-        pk_list.extend([pk] * 4)
         adjusted_point_list = adjust_point_to_be_on_polygon_edge(
             int_point_list, transect_polygon
         )
-        points_list.extend(adjusted_point_list)
-        z_list.extend([0] * 2)
 
-        line_string = LineString(adjusted_point_list)
-        points_list.append(line_string.line_interpolate_point(0.1, normalized=True))
-        points_list.append(line_string.line_interpolate_point(0.9, normalized=True))
-        wi = line_string.length
-        di = ((qi * MANNING) / (wi * (si**0.5))) ** (3 / 5)
-        hi = 2 * di / 1.8
-        z_list.extend([hi] * 2)
+        if LineString(adjusted_point_list).length == 0:
+            error_list.append(i)
+            continue
 
-    points_list_with_z = add_z_to_points_list_from_z_list(points_list, z_list)
+        all_middle_points_list = create_all_points_from_shore_points_list(
+            adjusted_point_list, qi, MANNING, si
+        )
+        points_list.extend(all_middle_points_list)
+        pk_list.extend([pk] * len(all_middle_points_list))
+        z_list.extend([point.coords[0][2] for point in all_middle_points_list])
 
     if save_boudaries_points_and_line:
         geo_df_int = geopandas.GeoDataFrame(geometry=boundary_list, crs="EPSG:2948")
@@ -88,6 +99,5 @@ def create_cross_section_points(
         geo_df_int_ls.to_file(Path(folder_save_path, "boundary_lines.shp"))
 
     df = pandas.DataFrame({"PK": pk_list, "z": z_list})
-
-    geo_df = geopandas.GeoDataFrame(df, geometry=points_list_with_z, crs="EPSG:2948")
+    geo_df = geopandas.GeoDataFrame(df, geometry=points_list, crs="EPSG:2948")
     geo_df.to_file(Path(folder_save_path, "cross_section_points.shp"))
