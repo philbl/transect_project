@@ -18,7 +18,7 @@ MANNING = 0.037
 
 
 def create_cross_section_points(
-    data, folder_save_path, save_boudaries_points_and_line=False
+    data, distance, folder_save_path, save_boudaries_points_and_line=False
 ):
     pk_list = []
     error_list = []
@@ -26,11 +26,14 @@ def create_cross_section_points(
     points_list = []
     boundary_list = []
     line_list = []
+    epsg = data.crs.to_epsg()
     for i in tqdm(range(1, len(data) - 1)):
         pk = data.loc[i]["PK"]
         transect_polygon = data.loc[i].geometry
-        qi = data.loc[i]["Q_ortho_adjusted"]
+        qi = data.loc[i]["Q_IMG_spli"]
         si = data.loc[i]["Slope"]
+        if si == 0:
+            continue
 
         polygon_before = retrieve_polygon_for_pk(data, pk - 5)
         polygon_after = retrieve_polygon_for_pk(data, pk + 5)
@@ -57,7 +60,7 @@ def create_cross_section_points(
             Point(point[0], point[1]) for point in intersect_points_after
         ]
         uptstream_middle_points_list = create_all_points_from_shore_points_list(
-            intersect_points_after_point_class, qi, MANNING, si
+            intersect_points_after_point_class, qi, MANNING, si, distance
         )
         points_list.extend(uptstream_middle_points_list)
         pk_list.extend([pk] * len(uptstream_middle_points_list))
@@ -85,19 +88,19 @@ def create_cross_section_points(
             continue
 
         all_middle_points_list = create_all_points_from_shore_points_list(
-            adjusted_point_list, qi, MANNING, si
+            adjusted_point_list, qi, MANNING, si, distance
         )
         points_list.extend(all_middle_points_list)
         pk_list.extend([pk] * len(all_middle_points_list))
         z_list.extend([point.coords[0][2] for point in all_middle_points_list])
 
     if save_boudaries_points_and_line:
-        geo_df_int = geopandas.GeoDataFrame(geometry=boundary_list, crs="EPSG:2948")
-        geo_df_int.to_file(Path(folder_save_path, "boundary_points.shp"))
+        geo_df_int = geopandas.GeoDataFrame(geometry=boundary_list, crs=f"EPSG:{epsg}")
+        geo_df_int.to_file(Path(folder_save_path, f"boundary_points_{distance}m.shp"))
 
-        geo_df_int_ls = geopandas.GeoDataFrame(geometry=line_list, crs="EPSG:2948")
-        geo_df_int_ls.to_file(Path(folder_save_path, "boundary_lines.shp"))
+        geo_df_int_ls = geopandas.GeoDataFrame(geometry=line_list, crs=f"EPSG:{epsg}")
+        geo_df_int_ls.to_file(Path(folder_save_path, f"boundary_lines_{distance}m.shp"))
 
     df = pandas.DataFrame({"PK": pk_list, "z": z_list})
-    geo_df = geopandas.GeoDataFrame(df, geometry=points_list, crs="EPSG:2948")
-    geo_df.to_file(Path(folder_save_path, "cross_section_points.shp"))
+    geo_df = geopandas.GeoDataFrame(df, geometry=points_list, crs=f"EPSG:{epsg}")
+    geo_df.to_file(Path(folder_save_path, f"cross_section_points_{distance}m.shp"))

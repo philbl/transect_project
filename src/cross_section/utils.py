@@ -174,7 +174,9 @@ def get_interpolated_points_from_points_list_by_a_distance(points_list, distance
     return points_interpolation_list
 
 
-def create_all_points_from_shore_points_list(shore_points_list, qi, manning, si):
+def create_all_points_from_shore_points_list(
+    shore_points_list, qi, manning, si, distance
+):
     points_list = []
     shore_points_z = add_z_to_points_list_from_z_list(shore_points_list, [0] * 2)
     points_list.extend(shore_points_z)
@@ -203,14 +205,16 @@ def create_all_points_from_shore_points_list(shore_points_list, qi, manning, si)
         ]
         shore_bottom_points_interpolation_list = (
             get_interpolated_points_from_points_list_by_a_distance(
-                [shore_points, corresponding_bottom_points], 0.3
+                [shore_points, corresponding_bottom_points], distance
             )
         )
         points_list.extend(shore_bottom_points_interpolation_list)
 
     # Ajouter les points au 30cm dans le fond
     bottom_points_interpolation_list = (
-        get_interpolated_points_from_points_list_by_a_distance(bottom_points_z, 0.3)
+        get_interpolated_points_from_points_list_by_a_distance(
+            bottom_points_z, distance
+        )
     )
     points_list.extend(bottom_points_interpolation_list)
     return points_list
